@@ -55,7 +55,7 @@ def apply_overrides_from_registry(metadata_data: dict, override_registry_key: st
 
 
 @deep_copy_params
-def metadata_to_registry_entry(metadata_definition: dict, connector_type: str, override_registry_key: str) -> dict:
+def metadata_to_registry_entry(metadata_entry: LatestMetadataEntry, connector_type: str, override_registry_key: str) -> dict:
     """Convert the metadata definition to a registry entry.
 
     Args:
@@ -66,6 +66,8 @@ def metadata_to_registry_entry(metadata_definition: dict, connector_type: str, o
     Returns:
         dict: The registry equivalent of the metadata definition.
     """
+    metadata_definition = metadata_entry.metadata_definition.dict()
+
     metadata_data = metadata_definition["data"]
 
     overrode_metadata_data = apply_overrides_from_registry(metadata_data, override_registry_key)
@@ -101,39 +103,43 @@ def metadata_to_registry_entry(metadata_definition: dict, connector_type: str, o
     if not overrode_metadata_data.get("releaseStage"):
         overrode_metadata_data["releaseStage"] = "alpha"
 
+    overrode_metadata_data["iconUrl"] = metadata_entry.icon_url
+
     return overrode_metadata_data
 
 
-def is_metadata_registry_enabled(metadata_definition: dict, registry_name: str) -> bool:
+def is_metadata_registry_enabled(metadata_entry: LatestMetadataEntry, registry_name: str) -> bool:
+    metadata_definition = metadata_entry.metadata_definition.dict()
     return get(metadata_definition, f"data.registries.{registry_name}.enabled", False)
 
 
-def is_metadata_connector_type(metadata_definition: dict, connector_type: str) -> bool:
+def is_metadata_connector_type(metadata_entry: LatestMetadataEntry, connector_type: str) -> bool:
+    metadata_definition = metadata_entry.metadata_definition.dict()
     return metadata_definition["data"]["connectorType"] == connector_type
 
 
 def construct_registry_from_metadata(
-    metadata_definitions: List[LatestMetadataEntry], registry_name: str
+    metadata_entries: List[LatestMetadataEntry], registry_name: str
 ) -> ConnectorRegistryV0:
     """Construct the registry from the metadata definitions.
 
     Args:
-        metadata_definitions (List[dict]): Metadata definitions that have been derived from the existing registry.
+        metadata_entries (List[dict]): Metadata definitions that have been derived from the existing registry.
         registry_name (str): The name of the registry to construct. One of "cloud" or "oss".
 
     Returns:
         dict: The registry.
     """
-    registry_derived_metadata_dicts = [metadata_definition.metadata_definition.dict() for metadata_definition in metadata_definitions]
+    # registry_derived_metadata_dicts = [metadata_definition.metadata_definition.dict() for metadata_definition in metadata_definitions]
     registry_sources = [
-        metadata_to_registry_entry(metadata, "source", registry_name)
-        for metadata in registry_derived_metadata_dicts
-        if is_metadata_registry_enabled(metadata, registry_name) and is_metadata_connector_type(metadata, "source")
+        metadata_to_registry_entry(metadata_entry, "source", registry_name)
+        for metadata_entry in metadata_entries
+        if is_metadata_registry_enabled(metadata_entry, registry_name) and is_metadata_connector_type(metadata_entry, "source")
     ]
     registry_destinations = [
-        metadata_to_registry_entry(metadata, "destination", registry_name)
-        for metadata in registry_derived_metadata_dicts
-        if is_metadata_registry_enabled(metadata, registry_name) and is_metadata_connector_type(metadata, "destination")
+        metadata_to_registry_entry(metadata_entry, "destination", registry_name)
+        for metadata_entry in metadata_entries
+        if is_metadata_registry_enabled(metadata_entry, registry_name) and is_metadata_connector_type(metadata_entry, "destination")
     ]
 
     return {"sources": registry_sources, "destinations": registry_destinations}
@@ -205,7 +211,7 @@ def generate_and_persist_registry(
     file_handle = persist_registry_to_json(registry_model, registry_name, registry_directory_manager)
 
     metadata = {
-        "gcs_path": MetadataValue.url(file_handle.gcs_path),
+        "gcs_path": MetadataValue.url(file_handle.public_url),
     }
 
     return Output(metadata=metadata, value=registry_model)
