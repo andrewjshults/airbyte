@@ -11,7 +11,7 @@ from dagster import asset, OpExecutionContext, MetadataValue, Output
 
 from metadata_service.spec_cache import get_cached_spec
 
-from orchestrator.models.metadata import MetadataDefinition
+from orchestrator.models.metadata import MetadataDefinition, LatestMetadataEntry
 from orchestrator.utils.dagster_helpers import OutputDataFrame, output_dataframe
 from orchestrator.utils.object_helpers import deep_copy_params, to_json_sanitized_dict
 
@@ -113,18 +113,18 @@ def is_metadata_connector_type(metadata_definition: dict, connector_type: str) -
 
 
 def construct_registry_from_metadata(
-    legacy_registry_derived_metadata_definitions: List[MetadataDefinition], registry_name: str
+    metadata_definitions: List[LatestMetadataEntry], registry_name: str
 ) -> ConnectorRegistryV0:
     """Construct the registry from the metadata definitions.
 
     Args:
-        legacy_registry_derived_metadata_definitions (List[dict]): Metadata definitions that have been derived from the existing registry.
+        metadata_definitions (List[dict]): Metadata definitions that have been derived from the existing registry.
         registry_name (str): The name of the registry to construct. One of "cloud" or "oss".
 
     Returns:
         dict: The registry.
     """
-    registry_derived_metadata_dicts = [metadata_definition.dict() for metadata_definition in legacy_registry_derived_metadata_definitions]
+    registry_derived_metadata_dicts = [metadata_definition.metadata_definition.dict() for metadata_definition in metadata_definitions]
     registry_sources = [
         metadata_to_registry_entry(metadata, "source", registry_name)
         for metadata in registry_derived_metadata_dicts
@@ -182,7 +182,7 @@ def persist_registry_to_json(
 
 
 def generate_and_persist_registry(
-    metadata_definitions: List[MetadataDefinition],
+    metadata_definitions: List[LatestMetadataEntry],
     cached_specs: OutputDataFrame,
     registry_directory_manager: GCSFileManager,
     registry_name: str,
@@ -191,7 +191,7 @@ def generate_and_persist_registry(
 
     Args:
         context (OpExecutionContext): The execution context.
-        metadata_definitions (List[MetadataDefinition]): The metadata definitions.
+        metadata_definitions (List[LatestMetadataEntry]): The metadata definitions.
         cached_specs (OutputDataFrame): The cached specs.
 
     Returns:
@@ -216,7 +216,7 @@ def generate_and_persist_registry(
 
 @asset(required_resource_keys={"registry_directory_manager"}, group_name=GROUP_NAME)
 def cloud_registry_from_metadata(
-    context: OpExecutionContext, metadata_definitions: List[MetadataDefinition], cached_specs: OutputDataFrame
+    context: OpExecutionContext, metadata_definitions: List[LatestMetadataEntry], cached_specs: OutputDataFrame
 ) -> Output[ConnectorRegistryV0]:
     """
     This asset is used to generate the cloud registry from the metadata definitions.
@@ -234,7 +234,7 @@ def cloud_registry_from_metadata(
 
 @asset(required_resource_keys={"registry_directory_manager"}, group_name=GROUP_NAME)
 def oss_registry_from_metadata(
-    context: OpExecutionContext, metadata_definitions: List[MetadataDefinition], cached_specs: OutputDataFrame
+    context: OpExecutionContext, metadata_definitions: List[LatestMetadataEntry], cached_specs: OutputDataFrame
 ) -> Output[ConnectorRegistryV0]:
     """
     This asset is used to generate the oss registry from the metadata definitions.
